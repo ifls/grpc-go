@@ -73,13 +73,13 @@ func SetLoggerV2(l LoggerV2) {
 
 const (
 	// infoLog indicates Info severity.
-	infoLog int = iota
+	infoLog int = iota	//0
 	// warningLog indicates Warning severity.
-	warningLog
+	warningLog			//1
 	// errorLog indicates Error severity.
-	errorLog
+	errorLog			//2
 	// fatalLog indicates Fatal severity.
-	fatalLog
+	fatalLog			//3
 )
 
 // severityName contains the string representation of each severity.
@@ -92,7 +92,7 @@ var severityName = []string{
 
 // loggerT is the default logger used by grpclog.
 type loggerT struct {
-	m []*log.Logger
+	m []*log.Logger		//不同级别有不同的logger
 	v int
 }
 

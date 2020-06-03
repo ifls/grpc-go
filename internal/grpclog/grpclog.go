@@ -71,18 +71,21 @@ type LoggerV2 interface {
 	Infoln(args ...interface{})
 	// Infof logs to INFO log. Arguments are handled in the manner of fmt.Printf.
 	Infof(format string, args ...interface{})
+
 	// Warning logs to WARNING log. Arguments are handled in the manner of fmt.Print.
 	Warning(args ...interface{})
 	// Warningln logs to WARNING log. Arguments are handled in the manner of fmt.Println.
 	Warningln(args ...interface{})
 	// Warningf logs to WARNING log. Arguments are handled in the manner of fmt.Printf.
 	Warningf(format string, args ...interface{})
+
 	// Error logs to ERROR log. Arguments are handled in the manner of fmt.Print.
 	Error(args ...interface{})
 	// Errorln logs to ERROR log. Arguments are handled in the manner of fmt.Println.
 	Errorln(args ...interface{})
 	// Errorf logs to ERROR log. Arguments are handled in the manner of fmt.Printf.
 	Errorf(format string, args ...interface{})
+
 	// Fatal logs to ERROR log. Arguments are handled in the manner of fmt.Print.
 	// gRPC ensures that all Fatal logs will exit with os.Exit(1).
 	// Implementations may also call os.Exit() with a non-zero exit code.
