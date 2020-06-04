@@ -22,8 +22,8 @@ import (
 	"context"
 )
 
-// Invoke sends the RPC request on the wire and returns after response is
-// received.  This is typically called by generated code.
+// Invoke sends the RPC request on the wire专注 and returns after response is received. 阻塞直到收到回复
+// This is typically called by generated code. 通常是给生成的代码调用
 //
 // All errors returned by Invoke are compatible with the status package.
 // 一元调用函数
@@ -32,6 +32,7 @@ func (cc *ClientConn) Invoke(ctx context.Context, method string, args, reply int
 	// configured as defaults from dial option as well as per-call options
 	opts = combine(cc.dopts.callOptions, opts)
 
+	//先执行拦截器，拦截器会调用invoke函数
 	if cc.dopts.unaryInt != nil {
 		return cc.dopts.unaryInt(ctx, method, args, reply, cc, invoke, opts...)
 	}

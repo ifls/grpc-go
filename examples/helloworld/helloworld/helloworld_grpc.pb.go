@@ -62,7 +62,9 @@ func _Greeter_SayHello_Handler(srv interface{}, ctx context.Context, dec func(in
 	if err := dec(in); err != nil {
 		return nil, err
 	}
+	//无需拦截
 	if interceptor == nil {
+		//调用方法处理请求
 		return srv.(GreeterServer).SayHello(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{

@@ -73,16 +73,15 @@ type ServiceDesc struct {
 	ServiceName string
 	// The pointer to the service interface. Used to check whether the user
 	// provided implementation satisfies the interface requirements.
-	HandlerType interface{}
+	HandlerType interface{}		//保存抽象服务接口，用于反射验证 实例实现了此接口
 	Methods     []MethodDesc
 	Streams     []StreamDesc
 	Metadata    interface{}
 }
 
-// service consists of the information of the server serving this service and
-// the methods in this service.
+// service consists of the information of the server serving this service and the methods in this service.
 type service struct {
-	server interface{} // the server for service methods
+	server interface{} 			//实现服务的对象实例 the server for service methods
 	md     map[string]*MethodDesc
 	sd     map[string]*StreamDesc
 	mdata  interface{}
@@ -100,17 +99,17 @@ type Server struct {
 
 	mu     sync.Mutex // guards following
 	lis    map[net.Listener]bool
-	conns  map[transport.ServerTransport]bool
-	serve  bool
+	conns  map[transport.ServerTransport]bool		//http2连接
+	serve  bool					// Serve() 设置为true 没什么用
 	drain  bool
 	cv     *sync.Cond          // signaled when connections close for GracefulStop
-	m      map[string]*service // service name -> service info
+	m      map[string]*service // 一个server 多个服务service name -> service info
 	events trace.EventLog
 
 	quit               *grpcsync.Event
 	done               *grpcsync.Event
 	channelzRemoveOnce sync.Once
-	serveWG            sync.WaitGroup // counts active Serve goroutines for GracefulStop
+	serveWG            sync.WaitGroup // 计数counts active Serve goroutines for GracefulStop() or Stop()
 
 	channelzID int64 // channelz unique identification number
 	czData     *channelzData
@@ -480,13 +479,13 @@ func (s *Server) stopServerWorkers() {
 	}
 }
 
-// NewServer creates a gRPC server which has no service registered and has not
-// started to accept requests yet.
+// NewServer creates a gRPC server which has no service registered and has not started to accept requests yet还未开始接收请求.
 func NewServer(opt ...ServerOption) *Server {
 	opts := defaultServerOptions
 	for _, o := range opt {
 		o.apply(&opts)
 	}
+
 	s := &Server{
 		lis:    make(map[net.Listener]bool),
 		opts:   opts,
@@ -496,11 +495,16 @@ func NewServer(opt ...ServerOption) *Server {
 		done:   grpcsync.NewEvent(),
 		czData: new(channelzData),
 	}
+
+	//服务端拦截器
 	chainUnaryServerInterceptors(s)
 	chainStreamServerInterceptors(s)
+
 	s.cv = sync.NewCond(&s.mu)
+
 	if EnableTracing {
 		_, file, line, _ := runtime.Caller(1)
+		//报告file:line
 		s.events = trace.NewEventLog("grpc.Server", fmt.Sprintf("%s:%d", file, line))
 	}
 
@@ -546,12 +550,16 @@ func (s *Server) register(sd *ServiceDesc, ss interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.printf("RegisterService(%q)", sd.ServiceName)
+
+	//开始提供服务后不能再注册
 	if s.serve {
 		grpclog.Fatalf("grpc: Server.RegisterService after Server.Serve for %q", sd.ServiceName)
 	}
 	if _, ok := s.m[sd.ServiceName]; ok {
 		grpclog.Fatalf("grpc: Server.RegisterService found duplicate service registration for %q", sd.ServiceName)
 	}
+
+	//记录服务实例和服务信息
 	srv := &service{
 		server: ss,
 		md:     make(map[string]*MethodDesc),
@@ -646,16 +654,16 @@ func (l *listenSocket) Close() error {
 	return err
 }
 
-// Serve accepts incoming connections on the listener lis, creating a new
-// ServerTransport and service goroutine for each. The service goroutines
-// read gRPC requests and then call the registered handlers to reply to them.
-// Serve returns when lis.Accept fails with fatal errors.  lis will be closed when
-// this method returns.
+// Serve accepts incoming connections on the listener lis, creating a new ServerTransport and service goroutine for each.
+// The service goroutines read gRPC requests and then call the registered handlers to reply to them.
+// Serve returns when lis.Accept fails with fatal errors.
+// lis will be closed when this method returns.
 // Serve will return a non-nil error unless Stop or GracefulStop is called.
 func (s *Server) Serve(lis net.Listener) error {
 	s.mu.Lock()
 	s.printf("serving")
 	s.serve = true
+
 	if s.lis == nil {
 		// Serve called after Stop or GracefulStop.
 		s.mu.Unlock()
@@ -666,12 +674,14 @@ func (s *Server) Serve(lis net.Listener) error {
 	s.serveWG.Add(1)
 	defer func() {
 		s.serveWG.Done()
+
 		if s.quit.HasFired() {
 			// Stop or GracefulStop called; block until done and return nil.
 			<-s.done.Done()
 		}
 	}()
 
+	//保存 监听器
 	ls := &listenSocket{Listener: lis}
 	s.lis[ls] = true
 
@@ -692,6 +702,7 @@ func (s *Server) Serve(lis net.Listener) error {
 	var tempDelay time.Duration // how long to sleep on accept failure
 
 	for {
+		//accept
 		rawConn, err := lis.Accept()
 		if err != nil {
 			if ne, ok := err.(interface {
@@ -715,6 +726,7 @@ func (s *Server) Serve(lis net.Listener) error {
 					timer.Stop()
 					return nil
 				}
+				//重试
 				continue
 			}
 			s.mu.Lock()
@@ -727,14 +739,14 @@ func (s *Server) Serve(lis net.Listener) error {
 			return err
 		}
 		tempDelay = 0
-		// Start a new goroutine to deal with rawConn so we don't stall this Accept
-		// loop goroutine.
+		// Start a new goroutine to deal with rawConn so we don't stall this Accept loop goroutine.
 		//
-		// Make sure we account for the goroutine so GracefulStop doesn't nil out
-		// s.conns before this conn can be added.
+		// Make sure we account for the goroutine so GracefulStop doesn't nil out s.conns before this conn can be added.
 		s.serveWG.Add(1)
 		go func() {
+			//阻塞直到连接成功
 			s.handleRawConn(rawConn)
+			//
 			s.serveWG.Done()
 		}()
 	}
@@ -747,8 +759,12 @@ func (s *Server) handleRawConn(rawConn net.Conn) {
 		rawConn.Close()
 		return
 	}
+
 	rawConn.SetDeadline(time.Now().Add(s.opts.connectionTimeout))
+
+	//封装认证信息
 	conn, authInfo, err := s.useTransportAuthenticator(rawConn)
+
 	if err != nil {
 		// ErrConnDispatched means that the connection was dispatched away from
 		// gRPC; those connections should be left open.
@@ -764,16 +780,21 @@ func (s *Server) handleRawConn(rawConn net.Conn) {
 	}
 
 	// Finish handshaking (HTTP2)
+	// 抽象http2连接
 	st := s.newHTTP2Transport(conn, authInfo)
 	if st == nil {
 		return
 	}
 
 	rawConn.SetDeadline(time.Time{})
+
 	if !s.addConn(st) {
 		return
 	}
+
+	//异步里再异步？
 	go func() {
+		//阻塞
 		s.serveStreams(st)
 		s.removeConn(st)
 	}()
@@ -815,6 +836,7 @@ func (s *Server) serveStreams(st transport.ServerTransport) {
 	var wg sync.WaitGroup
 
 	var roundRobinCounter uint32
+	//直接在调用点声明函数/闭包
 	st.HandleStreams(func(stream *transport.Stream) {
 		wg.Add(1)
 		if s.opts.numServerWorkers > 0 {
@@ -841,6 +863,8 @@ func (s *Server) serveStreams(st transport.ServerTransport) {
 		tr := trace.New("grpc.Recv."+methodFamily(method), method)
 		return trace.NewContext(ctx, tr)
 	})
+
+	//阻塞
 	wg.Wait()
 }
 
@@ -919,6 +943,7 @@ func (s *Server) addConn(st transport.ServerTransport) bool {
 		// immediately.
 		st.Drain()
 	}
+	//记录http2连接
 	s.conns[st] = true
 	return true
 }
@@ -927,7 +952,9 @@ func (s *Server) removeConn(st transport.ServerTransport) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.conns != nil {
+		//移出http2连接
 		delete(s.conns, st)
+
 		s.cv.Broadcast()
 	}
 }
@@ -1132,6 +1159,8 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 	if sh != nil || binlog != nil {
 		payInfo = &payloadInfo{}
 	}
+
+	//接收请求
 	d, err := recvAndDecompress(&parser{r: stream}, stream, dc, s.opts.maxReceiveMessageSize, payInfo, decomp)
 	if err != nil {
 		if st, ok := status.FromError(err); ok {
@@ -1141,9 +1170,11 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 		}
 		return err
 	}
+
 	if channelz.IsOn() {
 		t.IncrMsgRecv()
 	}
+
 	df := func(v interface{}) error {
 		if err := s.getCodec(stream.ContentSubtype()).Unmarshal(d, v); err != nil {
 			return status.Errorf(codes.Internal, "grpc: error unmarshalling request: %v", err)
@@ -1168,6 +1199,10 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 		return nil
 	}
 	ctx := NewContextWithServerTransportStream(stream.Context(), stream)
+	
+	// 调用用户注册的函数处理请求
+	// Handler是注册是保存的函数
+	// unaryInt是拦截器
 	reply, appErr := md.Handler(srv.server, ctx, df, s.opts.unaryInt)
 	if appErr != nil {
 		appStatus, ok := status.FromError(appErr)
@@ -1203,6 +1238,7 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 	}
 	opts := &transport.Options{Last: true}
 
+	//发送回复
 	if err := s.sendResponse(t, stream, reply, cp, opts, comp); err != nil {
 		if err == io.EOF {
 			// The entire stream is done (for unary RPC only).
@@ -1241,12 +1277,15 @@ func (s *Server) processUnaryRPC(t transport.ServerTransport, stream *transport.
 			Message: reply,
 		})
 	}
+
 	if channelz.IsOn() {
 		t.IncrMsgSent()
 	}
 	if trInfo != nil {
 		trInfo.tr.LazyLog(&payload{sent: true, msg: reply}, true)
 	}
+
+
 	// TODO: Should we be logging if writing status failed here, like above?
 	// Should the logging be in WriteStatus?  Should we ignore the WriteStatus
 	// error or allow the stats handler to see it?
@@ -1461,6 +1500,7 @@ func (s *Server) processStreamingRPC(t transport.ServerTransport, stream *transp
 	return err
 }
 
+//处理流上单个消息
 func (s *Server) handleStream(t transport.ServerTransport, stream *transport.Stream, trInfo *traceInfo) {
 	sm := stream.Method()
 	if sm != "" && sm[0] == '/' {
@@ -1488,9 +1528,11 @@ func (s *Server) handleStream(t transport.ServerTransport, stream *transport.Str
 	service := sm[:pos]
 	method := sm[pos+1:]
 
+	//拿出服务，处理函数
 	srv, knownService := s.m[service]
 	if knownService {
 		if md, ok := srv.md[method]; ok {
+			//md 是函数描述
 			s.processUnaryRPC(t, stream, srv, md, trInfo)
 			return
 		}
@@ -1570,6 +1612,7 @@ func ServerTransportStreamFromContext(ctx context.Context) ServerTransportStream
 func (s *Server) Stop() {
 	s.quit.Fire()
 
+	//服务停止, 直到所有协程都结束
 	defer func() {
 		s.serveWG.Wait()
 		s.done.Fire()
@@ -1640,6 +1683,7 @@ func (s *Server) GracefulStop() {
 	// Wait for serving threads to be ready to exit.  Only then can we be sure no
 	// new conns will be created.
 	s.mu.Unlock()
+	//阻塞, 直到停止
 	s.serveWG.Wait()
 	s.mu.Lock()
 
