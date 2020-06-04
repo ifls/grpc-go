@@ -71,6 +71,7 @@ func newCCResolverWrapper(cc *ClientConn, rb resolver.Builder) (*ccResolverWrapp
 	// accessing ccr.resolver which is being assigned here.
 	ccr.resolverMu.Lock()
 	defer ccr.resolverMu.Unlock()
+	// ->
 	ccr.resolver, err = rb.Build(cc.parsedTarget, ccr, rbo)
 	if err != nil {
 		return nil, err
@@ -145,6 +146,7 @@ func (ccr *ccResolverWrapper) UpdateState(s resolver.State) {
 		ccr.addChannelzTraceEvent(s)
 	}
 	ccr.curState = s
+	//->
 	ccr.poll(ccr.cc.updateResolverState(ccr.curState, nil))
 }
 

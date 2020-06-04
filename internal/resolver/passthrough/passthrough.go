@@ -31,6 +31,7 @@ func (*passthroughBuilder) Build(target resolver.Target, cc resolver.ClientConn,
 		target: target,
 		cc:     cc,
 	}
+	//->
 	r.start()
 	return r, nil
 }

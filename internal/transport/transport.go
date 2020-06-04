@@ -17,8 +17,8 @@
  */
 
 // Package transport defines and implements message oriented communication
-// channel to complete various transactions (e.g., an RPC).  It is meant for
-// grpc-internal usage and is not intended to be imported directly by users.
+// channel to complete完成 various transactions (e.g., an RPC).
+// It is meant for grpc-internal usage and is not intended to be imported directly by users.
 package transport
 
 import (
@@ -63,8 +63,8 @@ func (p *bufferPool) put(b *bytes.Buffer) {
 	p.pool.Put(b)
 }
 
-// recvMsg represents the received msg from the transport. All transport
-// protocol specific info has been removed.
+// recvMsg represents表示 the received msg from the transport.
+// All transport protocol specific info has been removed.
 type recvMsg struct {
 	buffer *bytes.Buffer
 	// nil: received some data

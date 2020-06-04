@@ -70,6 +70,7 @@ func (b *pickfirstBalancer) UpdateClientConnState(cs balancer.ClientConnState) e
 	}
 	if b.sc == nil {
 		var err error
+		//创建子连接struct
 		b.sc, err = b.cc.NewSubConn(cs.ResolverState.Addresses, balancer.NewSubConnOptions{})
 		if err != nil {
 			if grpclog.V(2) {
@@ -83,6 +84,7 @@ func (b *pickfirstBalancer) UpdateClientConnState(cs balancer.ClientConnState) e
 		}
 		b.state = connectivity.Idle
 		b.cc.UpdateState(balancer.State{ConnectivityState: connectivity.Idle, Picker: &picker{result: balancer.PickResult{SubConn: b.sc}}})
+		//-> 子连接 进行连接
 		b.sc.Connect()
 	} else {
 		b.sc.UpdateAddresses(cs.ResolverState.Addresses)

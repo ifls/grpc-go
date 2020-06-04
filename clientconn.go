@@ -121,6 +121,7 @@ func Dial(target string, opts ...DialOption) (*ClientConn, error) {
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
 func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *ClientConn, err error) {
+	//初始化对象
 	cc := &ClientConn{
 		target:            target,
 		csMgr:             &connectivityStateManager{},
@@ -132,12 +133,14 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 	}
 	cc.retryThrottler.Store((*retryThrottler)(nil))
 	cc.ctx, cc.cancel = context.WithCancel(context.Background())
-
+	//应用选项
 	for _, opt := range opts {
 		opt.apply(&cc.dopts)
 	}
 
+	//一元方法拦截器
 	chainUnaryClientInterceptors(cc)
+	//流式方法拦截器
 	chainStreamClientInterceptors(cc)
 
 	defer func() {
@@ -146,6 +149,7 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 		}
 	}()
 
+	//是否开启数据收集
 	if channelz.IsOn() {
 		if cc.dopts.channelzParentID != 0 {
 			cc.channelzID = channelz.RegisterChannel(&channelzChannel{cc}, cc.dopts.channelzParentID, target)
@@ -164,6 +168,7 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 		cc.csMgr.channelzID = cc.channelzID
 	}
 
+	//dialOption 默认是false
 	if !cc.dopts.insecure {
 		if cc.dopts.copts.TransportCredentials == nil && cc.dopts.copts.CredsBundle == nil {
 			return nil, errNoTransportSecurity
@@ -192,8 +197,10 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 	cc.mkp = cc.dopts.copts.KeepaliveParams
 
 	if cc.dopts.copts.Dialer == nil {
+		//实际使用的拨号函数
 		cc.dopts.copts.Dialer = func(ctx context.Context, addr string) (net.Conn, error) {
 			network, addr := parseDialTarget(addr)
+			//
 			return (&net.Dialer{}).DialContext(ctx, network, addr)
 		}
 		if cc.dopts.withProxy {
@@ -212,6 +219,8 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 		ctx, cancel = context.WithTimeout(ctx, cc.dopts.timeout)
 		defer cancel()
 	}
+
+	//设置错误可以被上面的defer使用
 	defer func() {
 		select {
 		case <-ctx.Done():
@@ -300,7 +309,7 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 		Target:           cc.parsedTarget,
 	}
 
-	// Build the resolver.
+	// Build the resolver. 会发起异步任务
 	rWrapper, err := newCCResolverWrapper(cc, resolverBuilder)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build resolver: %v", err)
@@ -339,6 +348,7 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 }
 
 // chainUnaryClientInterceptors chains all unary client interceptors into one.
+
 func chainUnaryClientInterceptors(cc *ClientConn) {
 	interceptors := cc.dopts.chainUnaryInts
 	// Prepend dopts.unaryInt to the chaining interceptors if it exists, since unaryInt will
@@ -352,6 +362,7 @@ func chainUnaryClientInterceptors(cc *ClientConn) {
 	} else if len(interceptors) == 1 {
 		chainedInt = interceptors[0]
 	} else {
+		//递归构造
 		chainedInt = func(ctx context.Context, method string, req, reply interface{}, cc *ClientConn, invoker UnaryInvoker, opts ...CallOption) error {
 			return interceptors[0](ctx, method, req, reply, cc, getChainUnaryInvoker(interceptors, 0, invoker), opts...)
 		}
@@ -451,6 +462,7 @@ func (csm *connectivityStateManager) getNotifyChan() <-chan struct{} {
 type ClientConnInterface interface {
 	// Invoke performs a unary RPC and returns after the response is received
 	// into reply.
+	// method 方法名 args 请求参数 返回 reply
 	Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...CallOption) error
 	// NewStream begins a streaming RPC.
 	NewStream(ctx context.Context, desc *StreamDesc, method string, opts ...CallOption) (ClientStream, error)
@@ -654,6 +666,7 @@ func (cc *ClientConn) updateResolverState(s resolver.State, err error) error {
 			i++
 		}
 	}
+	//->
 	uccsErr := bw.updateClientConnState(&balancer.ClientConnState{ResolverState: s, BalancerConfig: balCfg})
 	if ret == nil {
 		ret = uccsErr // prefer ErrBadResolver state since any other error is
@@ -740,6 +753,7 @@ func (cc *ClientConn) newAddrConn(addrs []resolver.Address, opts balancer.NewSub
 			},
 		})
 	}
+	//保存新建立的连接
 	cc.conns[ac] = struct{}{}
 	cc.mu.Unlock()
 	return ac, nil
@@ -753,6 +767,7 @@ func (cc *ClientConn) removeAddrConn(ac *addrConn, err error) {
 		cc.mu.Unlock()
 		return
 	}
+	//删除
 	delete(cc.conns, ac)
 	cc.mu.Unlock()
 	ac.tearDown(err)
@@ -806,7 +821,7 @@ func (ac *addrConn) connect() error {
 	ac.updateConnectivityState(connectivity.Connecting, nil)
 	ac.mu.Unlock()
 
-	// Start a goroutine connecting to the server asynchronously.
+	//->异步拨号  Start a goroutine connecting to the server asynchronously.
 	go ac.resetTransport()
 	return nil
 }
@@ -987,6 +1002,7 @@ func (cc *ClientConn) Close() error {
 		cc.mu.Unlock()
 		return ErrClientConnClosing
 	}
+	//所有连接
 	conns := cc.conns
 	cc.conns = nil
 	cc.csMgr.updateState(connectivity.Shutdown)
@@ -1006,6 +1022,7 @@ func (cc *ClientConn) Close() error {
 		bWrapper.close()
 	}
 
+	//关闭连接
 	for ac := range conns {
 		ac.tearDown(ErrClientConnClosing)
 	}
@@ -1083,6 +1100,7 @@ func (ac *addrConn) adjustParams(r transport.GoAwayReason) {
 }
 
 func (ac *addrConn) resetTransport() {
+	// 死循环直到return
 	for i := 0; ; i++ {
 		if i > 0 {
 			ac.cc.resolveNow(resolver.ResolveNowOptions{})
@@ -1117,7 +1135,7 @@ func (ac *addrConn) resetTransport() {
 		ac.updateConnectivityState(connectivity.Connecting, nil)
 		ac.transport = nil
 		ac.mu.Unlock()
-
+		//尝试对所有地址进行连接
 		newTr, addr, reconnect, err := ac.tryAllAddrs(addrs, connectDeadline)
 		if err != nil {
 			// After exhausting all addresses, the addrConn enters

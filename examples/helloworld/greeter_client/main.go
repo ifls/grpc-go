@@ -35,6 +35,8 @@ const (
 )
 
 func main() {
+
+	//net.Listen("tcp", ":8088")
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {

@@ -138,6 +138,7 @@ type ClientStream interface {
 //
 // If none of the above happen, a goroutine and a context will be leaked, and grpc
 // will not call the optionally-configured stats handler with a stats.End message.
+// 流式接口
 func (cc *ClientConn) NewStream(ctx context.Context, desc *StreamDesc, method string, opts ...CallOption) (ClientStream, error) {
 	// allow interceptor to see all applicable call options, which means those
 	// configured as defaults from dial option as well as per-call options
@@ -676,6 +677,7 @@ func (cs *clientStream) bufferForRetryLocked(sz int, op func(a *csAttempt) error
 	cs.buffer = append(cs.buffer, op)
 }
 
+//发送 grpc request
 func (cs *clientStream) SendMsg(m interface{}) (err error) {
 	defer func() {
 		if err != nil && err != io.EOF {
@@ -694,7 +696,7 @@ func (cs *clientStream) SendMsg(m interface{}) (err error) {
 		cs.sentLast = true
 	}
 
-	// load hdr, payload, data
+	// 打包消息 load hdr, payload, data
 	hdr, payload, data, err := prepareMsg(m, cs.codec, cs.cp, cs.comp)
 	if err != nil {
 		return err
@@ -722,6 +724,7 @@ func (cs *clientStream) SendMsg(m interface{}) (err error) {
 	return
 }
 
+//接收grpc response
 func (cs *clientStream) RecvMsg(m interface{}) error {
 	if cs.binlog != nil && !cs.serverHeaderBinlogged {
 		// Call Header() to binary log header if it's not already logged.

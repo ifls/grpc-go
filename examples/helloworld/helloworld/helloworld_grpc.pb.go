@@ -25,6 +25,7 @@ type greeterClient struct {
 	cc grpc.ClientConnInterface
 }
 
+//快捷接口
 func NewGreeterClient(cc grpc.ClientConnInterface) GreeterClient {
 	return &greeterClient{cc}
 }

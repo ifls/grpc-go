@@ -171,6 +171,7 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr resolver.Address, opts
 		}
 	}()
 
+	//拨号
 	conn, err := dial(connectCtx, opts.Dialer, addr.Addr)
 	if err != nil {
 		if opts.FailOnNonTempDialError {

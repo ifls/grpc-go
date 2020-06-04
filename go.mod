@@ -13,3 +13,5 @@ require (
 	golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a
 	google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
 )
+
+replace google.golang.org/grpc => .
